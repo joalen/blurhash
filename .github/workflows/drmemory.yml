@@ -16,12 +16,6 @@ jobs:
         uses: actions/checkout@v4 
         with:
           ref: 712a47f946b98c30097eb1ada086ea00b18681ec
-
-      - name: Install dependencies for project (Linux)
-        if: runner.os == 'Linux'
-        run: | 
-          sudo apt-get update
-          sudo apt-get install -y <-- insert your project dependencies here -->
           
       - name: Build repository 
         run: | 
