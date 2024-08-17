@@ -62,7 +62,7 @@ jobs:
               echo -ne "\rProgress : [${done_sub_bar}${todo_sub_bar}] ${percent}%"
           }
           
-          export DYNAMORIO_HOME="/tmp/DynamoRIO-Linux-10.0.0"
+          export DYNAMORIO_HOME="/tmp/DynamoRIO-Linux-10.91.19860"
           export GITHUB_PATH="$DYNAMORIO_HOME/bin64:$DYNAMORIO_HOME/tools/bin64:$GITHUB_PATH"
           export LD_LIBRARY_PATH="$DYNAMORIO_HOME/lib64:$DYNAMORIO_HOME/tools/lib64/release:$LD_LIBRARY_PATH"
           LOG_DIR="./dynamoriologs/logs_memtrace"
