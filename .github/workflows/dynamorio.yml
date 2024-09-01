@@ -45,68 +45,48 @@ jobs:
           #!/bin/bash
           set +e 
           
-          bar_size=40
-          bar_char_done="#"
-          bar_char_todo="-"
-          bar_percentage_scale=2
-          
-          function show_progress {
-              current="$1"
-              total="$2"
-          
-              percent=$(bc <<< "scale=$bar_percentage_scale; 100 * $current / $total")
-              done=$(bc <<< "scale=0; $bar_size * $percent / 100")
-              todo=$(bc <<< "scale=0; $bar_size - $done")
-              done_sub_bar=$(printf "%${done}s" | tr " " "${bar_char_done}")
-              todo_sub_bar=$(printf "%${todo}s" | tr " " "${bar_char_todo}")
-              echo -ne "\rProgress : [${done_sub_bar}${todo_sub_bar}] ${percent}%"
-          }
-          
           export DYNAMORIO_HOME="/tmp/DynamoRIO-Linux-10.91.19860"
           export GITHUB_PATH="$DYNAMORIO_HOME/bin64:$DYNAMORIO_HOME/tools/bin64:$GITHUB_PATH"
           export LD_LIBRARY_PATH="$DYNAMORIO_HOME/lib64:$DYNAMORIO_HOME/tools/lib64/release:$LD_LIBRARY_PATH"
           LOG_DIR="./dynamoriologs/logs_memtrace"
           mkdir -p "$LOG_DIR"
+          mkdir -p blurhash_encoder_memtrace
+          mkdir -p blurhash_decoder_memtrace
+          OUTPUT_FILE="output_hash.txt"
           
-          is_executable() {
-            local file="$1"
-            if file "$file" | grep -q 'ELF 64-bit'; then
-              return 0
-            else
-              return 1
-            fi
-          }
+          # Testing out the main functionality of the blurhash encoder
+          cd blurhash_encoder_memtrace && wget --no-check-certificate 'https://drive.google.com/uc?export=download&id=16f5dpdAb6XZRS76mUzEW-qMHwCeaxGM0' -O downloaded_file.png
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -offline -- ../C/blurhash_encoder 10 10 downloaded_file.png > "../$OUTPUT_FILE"
+          PID=$!
+          wait $PID
+          DRMEMTRACE_DIR=$(find . -type d -name "drmemtrace.jq.$PID*")
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -indir "$DRMEMTRACE_DIR" > "../${LOG_DIR}/blurhashEncoder-cachesim.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool TLB -indir "$DRMEMTRACE_DIR" > "../${LOG_DIR}/blurhashEncoder-TLB.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool reuse_distance -reuse_distance_histogram -indir "$DRMEMTRACE_DIR" > "../${LOG_DIR}/blurhashEncoder-reuse_dist.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool reuse_time -indir "$DRMEMTRACE_DIR" > "../${LOG_DIR}/blurhashEncoder-reuse_time.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool basic_counts -indir "$DRMEMTRACE_DIR" > "${LOG_DIR}/blurhashEncoder-basic_counts.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool view -indir "$DRMEMTRACE_DIR"  > "../${LOG_DIR}/blurhashEncoder-view.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool histogram -indir "$DRMEMTRACE_DIR" > "../${LOG_DIR}/blurhashEncoder-histogram.log" 2>&1
+
           
-          run_with_dynrio_memtrace() {
-            local executable="$1"
-            local base_name=$(basename "$executable")
-            # Run the various DynamoRIO tools and save the logs
-            timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -- "$executable" > "${LOG_DIR}/${base_name}-cachesim.log" 2>&1
-            timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool TLB -- "$executable" > "${LOG_DIR}/${base_name}-TLB.log" 2>&1
-            timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool reuse_distance -reuse_distance_histogram -- "$executable" > "${LOG_DIR}/${base_name}-reuse_dist.log" 2>&1
-            timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool reuse_time -- "$executable" > "${LOG_DIR}/${base_name}-reuse_time.log" 2>&1
-            timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool basic_counts -- "$executable" > "${LOG_DIR}/${base_name}-basic_counts.log" 2>&1
-            timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool view -- "$executable" > "${LOG_DIR}/${base_name}-view.log" 2>&1
-            timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool histogram -- "$executable" > "${LOG_DIR}/${base_name}-histogram.log" 2>&1
-          }
+          cd .. && rm -r blurhash_encoder_memtrace
+
           
-          # Count number of executable files
-          total_files=$(find . -type f -executable | wc -l)
-          current_file=0
-          
-          # Find executable files and process them with a progress bar
-          find . -type f -executable | while read -r file; do
-            if is_executable "$file"; then
-              # Show progress
-              ((current_file++))
-              show_progress "$current_file" "$total_files"
-              run_with_dynrio_memtrace "$file"
-              echo ""
-              echo ""
-              clear
-            fi
-          done
-          
+          # Testing out the main functionality of the blurhash decoder
+          cd blurhash_decoder_memtrace && wget --no-check-certificate 'https://drive.google.com/uc?export=download&id=16f5dpdAb6XZRS76mUzEW-qMHwCeaxGM0' -O downloaded_file.png
+          HASH=$(tail -n 1 "../$OUTPUT_FILE")
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -offline -- ../C/blurhash_decoder "$HASH" 1080 720 decoded.png
+          PID=$!
+          wait $PID
+          DRMEMTRACE_DIR=$(find . -type d -name "drmemtrace.jq.$PID*")
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -indir "$DRMEMTRACE_DIR" > "../${LOG_DIR}/blurhashDecoder-cachesim.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool TLB -indir "$DRMEMTRACE_DIR" > "../${LOG_DIR}/$blurhashDecoder-TLB.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool reuse_distance -reuse_distance_histogram -indir "$DRMEMTRACE_DIR" > "../${LOG_DIR}/blurhashDecoder-reuse_dist.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool reuse_time -indir "$DRMEMTRACE_DIR" > "../${LOG_DIR}/blurhashDecoder-reuse_time.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool basic_counts -indir "$DRMEMTRACE_DIR" > "${LOG_DIR}/blurhashDecoder-basic_counts.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool view -indir "$DRMEMTRACE_DIR"  > "../${LOG_DIR}/blurhashDecoder-view.log" 2>&1
+          timeout -k 15 60 $DYNAMORIO_HOME/bin64/drrun -t drmemtrace -tool histogram -indir "$DRMEMTRACE_DIR" > "../${LOG_DIR}/blurhashDecoder-histogram.log" 2>&1
+
           # Remove empty log files
           find "$LOG_DIR" -type f -size 0 -delete
           
